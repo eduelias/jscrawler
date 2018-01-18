@@ -1,0 +1,588 @@
+﻿<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/themes/smoothness/jquery-ui.css" />
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/jquery-ui.min.js"></script>
+    <script src="js/highcharts.js"></script>
+    <script src="jquery.hive.js"></script>
+    <script src="js/modules/exporting.js"></script>
+    <!--<script src="Words.js"></script>-->
+    <script src="Spider.js"></script>
+    <script>
+        var Serie = 0;
+        var Visitados = 0;
+        var labelizer = [];
+        var caminhos = [];
+    </script>
+    <title></title>
+    <style>
+        table {
+            white-space: normal;
+            line-height: normal;
+            font-weight: normal;
+            font-size: small;
+            font-variant: normal;
+            font-style: normal;
+            color: -webkit-text;
+            text-align: start;
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 99%;
+        }
+        
+        table td {
+            border: solid 1px #fff;
+            -ms-word-wrap: break-word;
+            word-wrap: break-word;
+        }
+        
+        .box {
+            width: 30px;
+            /* or a suitable width*/
+            text-align: center;
+            position: relative;
+            margin: 0 auto;
+            background-color: red;
+            color: white;
+            display: inline-block;
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+        
+        .warmedUp {
+            background-color: #5D5;
+        }
+        
+        .tooMuchMemory {
+            background-color: #9D9;
+        }
+        
+        .tooMuchTime {
+            background-color: #DD9;
+        }
+        
+        .error {
+            background-color: #D99;
+        }
+    </style>
+</head>
+
+<body style="font-family: calibri">
+    <button id="Start" value="Start" disabled="disabled">START</button>
+    <button id="Stop" value="Stop" disabled="disabled">STOP</button>
+    <button id="Spawn" value="Spawn">SPAWN</button>
+    <button id="Hide" value="Hide">Hide</button>
+    <table width="100%" id="Graficos">
+        <tr>
+            <td style=" width: 15%;">
+                <table width="100%">
+                    <tr>
+                        <td style=" width: 75%;"><b> Avg Response time (ms):</b></td>
+                        <td id="ResponseTime">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Avg Memory usage (MB): </b></td>
+                        <td id="MemoryAloc">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Errors: </b></td>
+                        <td id="Errors">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Queue size: </b></td>
+                        <td id="SFila">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Visited links: </b></td>
+                        <td id="SVisitados">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Max Memory Aloc (Mb): </b></td>
+                        <td id="MAXM">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Max Memory &#916; (Mb): </b></td>
+                        <td id="MAXMD">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Max Resp Time (ms): </b></td>
+                        <td id="MAXR">0</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" id="MAXRLINK"></td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Current Response Markup: </b></td>
+                        <td id="CRMKUP">0</td>
+                    </tr>
+                    <tr>
+                        <td style=" width: 75%;"><b> Resp Markup Index: </b></td>
+                        <td><input type="number" name="points" min="0" max="20" step="1" value="10" id="MRINDX" style="width: 36px;" /></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            <hr width="100%" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><b>Do warmup only:</b></td>
+                        <td><input type="checkbox" id="WarmupOnly" /></td>
+                    </tr>
+                    <tr>
+                        <td><b>Include:</b></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><input type="text" id="excludes" style="width:100%" /></td>
+                    </tr>
+                </table>
+            </td>
+            <td style="width: 80%;">
+                <div id="containerResponse" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+            </td>
+            <td style="width: 15%;" id="hideButtons">
+
+            </td>
+        </tr>
+    </table>
+
+    <table width="100%" id="tableOfErrors">
+        <tr>
+            <td style="width: 100%" colspan="2">
+                <div id="ConsultandoAgora"></div>
+        </tr>
+        <tr>
+            <td style="width: 50%">Passo a passo</td>
+            <td style="width:50%">Erro</td>
+        </tr>
+    </table>
+    <br/>
+
+
+</body>
+<script>
+    $(document).ready(function() {
+        AVGResponseTime = [];
+        AVGMemoryUsage = [];
+        AVGR = 0;
+        AVGM = 0;
+        MAXR = 0;
+        MAXM = 0;
+        MAXRD = 0;
+        MAXMD = 0;
+
+        var _cb = function(data) {
+            if ($("#Stop").is(':enabled'))
+                $($.Hive.get(0)).send({
+                    'cmd': 'GetOneFromLine'
+                });
+        };
+
+        var _addToLine = function(obj) {
+            if (!$("#WarmupOnly").is(":checked") || !(new RegExp(/^(.*?)\>(.*)\> (.*?)/gi).test(obj.breadcrum))) {
+                $($.Hive.get(0)).send({
+                    'cmd': 'AddToLine',
+                    'objeto': obj,
+                    'params': {
+                        'isToForceInsert': false
+                    }
+                });
+            }
+        }
+
+        var _cbStatUpdate = function(time, href, breadcrum, ymemusage, length) {
+
+            var x = (new Date()).getTime();
+            var y = time;
+            AVGResponseTime.push(time);
+            if (time > MAXR) {
+                MAXR = time;
+                $("#MAXRLINK").html("<a href='" + href + "' target=\"_blank\"'>Max response time page</a>");
+            }
+            var u = href;
+            if (typeof(labelizer[x]) === 'undefined') {
+                labelizer[x] = [];
+            }
+            labelizer[x][y] = {
+                'endereco': u,
+                'erro': '',
+                'breadcrum': breadcrum,
+                'size': length
+            };
+            caminhos[x] = breadcrum;
+
+            $('#containerResponse').highcharts().series[0].addPoint([x, y], true, false);
+            $('#containerResponse').highcharts().series[5].addPoint([x, (length / 100)], true, false);
+
+            // Too much memory used
+            if (typeof(ymemusage) !== 'undefined' && ymemusage > 0) {
+                AVGMemoryUsage.push(ymemusage);
+                var ymem = ymemusage;
+
+                if ($('#containerResponse').highcharts().series[2].points.length == 1) {
+                    MAXMD = ymemusage;
+                }
+
+                if ($('#containerResponse').highcharts().series[2].points.length > 1) {
+                    var lastPoint = ($('#containerResponse').highcharts().series[2].points[$('#containerResponse').highcharts().series[2].points.length - 1].y);
+                    if ((ymem - lastPoint) > (AVGM * 2))
+                        $('#tableOfErrors tr:last').after('<tr class="tooMuchMemory"><td title="' + href + '"><a href="' + href + '" target="_blank" style="text-decoration:initial;color:black;">' + breadcrum + '</a></td><td> Aumento de memória expressivo: ' + (ymem - lastPoint) + 'Mb </td></tr>');
+                }
+                $('#containerResponse').highcharts().series[2].addPoint([x, ymemusage], true, false);
+                labelizer[x][y].memusage = ymem;
+                var sum = 0;
+                for (var i = 0; i < AVGMemoryUsage.length; i++) {
+                    sum += parseInt(AVGMemoryUsage[i], 10); //don't forget to add the base
+                }
+                if (AVGMemoryUsage.length > 0) {
+                    AVGM = sum / AVGMemoryUsage.length;
+                    $("#MemoryAloc").html(Math.round(AVGM));
+                }
+                MAXM = (MAXM > ymemusage) ? MAXM : Math.round(ymemusage);
+                MAXMD = (MAXMD > Math.round(ymem - lastPoint)) ? MAXMD : Math.round(ymem - lastPoint);
+            }
+
+            var sum = 0;
+            for (var i = 0; i < AVGResponseTime.length; i++) {
+                sum += parseInt(AVGResponseTime[i], 10); //don't forget to add the base
+            }
+            if (AVGResponseTime.length > 0) {
+                AVGR = sum / AVGResponseTime.length;
+                AVGR = Math.round(AVGR);
+                $("#ResponseTime").html(Math.round(AVGR));
+            }
+
+            $("#MAXM").html(MAXM);
+            $("#MAXMD").html(MAXMD);
+            $("#MAXR").html(MAXR);
+            var markupIndex = $("#MRINDX").val();
+            var markup = markupIndex * AVGR;
+            $("#CRMKUP").html(markup)
+
+            // too much time waiting
+            if (y > (markup))
+                $('#tableOfErrors tr:last').after('<tr class="tooMuchTime"><td title="' + href + '"><a href="' + href + '" target="_blank" style="text-decoration:initial;color:black;">' + breadcrum + '</a></td><td> Too much time enlapsed: ' + y + 'ms </td></tr>');
+
+            if ($("#WarmupOnly").is(":checked"))
+                $('#tableOfErrors tr:last').after('<tr class="warmedUp"><td title="' + href + '"><a href="' + href + '" target="_blank" style="text-decoration:initial;color:black;">' + breadcrum + '</a></td><td> Warmed up in: ' + y + 'ms </td></tr>');
+
+            if ($("#Stop").is(':enabled'))
+                $($.Hive.get(0)).send({
+                    'cmd': 'TryToExecuteThis',
+                    'callback': 'StatusCheck',
+                    'function': 'function (a) { return {"Fila":Fila.length, "Visitados":Visitados.length}}',
+                    'params': {}
+                });
+
+            $("#hideButtons").html('')
+            for (var reckey in $('#containerResponse').highcharts().series) {
+                if ($('#containerResponse').highcharts().series[reckey].name === "") continue;
+                $("#hideButtons")
+                    .append($('<button>')
+                        .css('width', '200px')
+                        .data('serieid', reckey)
+                        .html(
+                            $('#containerResponse')
+                            .highcharts()
+                            .series[reckey].name
+                        ).click(
+                            function(o) {
+                                var serie = $('#containerResponse').highcharts().series[$(o.target).data('serieid')];
+                                if (serie.visible)
+                                    serie.hide();
+                                else
+                                    serie.show();
+                            })).append('<br>');
+            }
+
+        }
+
+        var _cbCompleteErroInfo = function(o, href, mensagem) {
+            var errormsg = ''; //$(o.responseText).find('div.detail').text().trim();
+
+            if (typeof(mensagem) !== 'undefined' && mensagem != '')
+                errormsg = mensagem;
+            else
+                errormsg = $(o.responseText).find('div#detail').text().trim();
+
+            if (errormsg == '')
+                errormsg = $(o.responseText).filter('title').text().trim();
+
+            if (errormsg == '')
+                errormsg = o.status;
+
+            if (errormsg == 'Erro') {
+                var erro1 = $(o.responseText).find('div.main').find('div')[0].innerText;
+                var erro2 = $(o.responseText).find('div.main').find('div')[0].innerText;
+                errormsg = erro1 + ' - ' + erro2;
+            }
+
+            $($.Hive.get(0)).send({
+                'cmd': 'GetMyParentPlease',
+                'params': {
+                    'erro': errormsg
+                },
+                'endereco': href
+            });
+
+            var x = (new Date()).getTime();
+            var y = 1000;
+            var u = errormsg;
+            $('#containerResponse').highcharts().series[1].addPoint([x, y], true, false);
+        }
+
+        try {
+            $.Hive.create({
+                worker: 'AsyncLineController.js',
+                receive: function(data) {
+                    switch (data.event) {
+                        case 'AddedToLine':
+                            {}
+                            break;
+                        case 'ReturningOneFromLine':
+                            {
+                                if (typeof(data.params.objeto) !== 'undefined')
+                                    Carrega(data.params.objeto, _cb, _addToLine, _cbCompleteErroInfo, data.params.breadcrum, _cbStatUpdate);
+                                $("#Stop").removeAttr('disabled');
+                                $("#Start").attr('disabled', 'disabled');
+                            }
+                            break;
+                        case 'ParentFound':
+                            {
+                                var loc = {
+                                    'endereco': data.params.endereco,
+                                    'origem': data.params.origem,
+                                    'breadcrum': data.params.breadcrum
+                                };
+
+
+                                var item = Erros.filter(function(n) {
+                                    if (n.erro == data.params.erro) {
+                                        n.locais.push(loc);
+                                    }
+                                    return n.erro == data.params.erro;
+                                });
+
+                                if (item.length === 0) {
+                                    var parametros = {
+                                        'erro': data.params.erro,
+                                        'locais': [loc]
+                                    };
+                                    Erros.push(parametros);
+                                }
+                                $("#errors").html(Erros.length);
+                                $('#tableOfErrors tr:last').after('<tr class="error"><td title="' + data.params.endereco + '"><a href="' + data.params.endereco + '" target="_blank" style="text-decoration:initial;color:black;">' + data.params.breadcrum + '</a></td><td>' + data.params.erro + '</td></tr>');
+                            }
+                            break;
+                        case 'LogThatShit':
+                            {
+                                console.log(data);
+                                data = null;
+                            }
+                            break;
+                        case 'TakeThatWholeLineYouLilBastard':
+                            {
+                                console.log(data.fila);
+                                data = null;
+                            }
+                            break;
+                        case 'StatusCheck':
+                            {
+                                $("#ConsultandoAgora").text(PesquisandoAgora.breadcrum.substring(0, 150));
+                                var x = (new Date()).getTime();
+                                var yv = AVGM;
+                                var yf = AVGR;
+                                $("#SFila").html(data.objeto.Fila)
+                                $("#SVisitados").html(data.objeto.Visitados - data.objeto.Fila)
+                                var u = PesquisandoAgora.Origem;
+
+                                $('#containerResponse').highcharts().series[3].addPoint([x, yv], true, false);
+                                $('#containerResponse').highcharts().series[4].addPoint([x, yf], true, false);
+                            }
+                            break;
+                        default:
+                    }
+                },
+                created: function(hive) {
+                    // a
+                }
+            });
+        } catch (e) {
+
+        }
+
+        $($.Hive.get(0)).send({
+            'cmd': 'AddToLine',
+            'objeto': {
+                'endereco': window.location.origin,
+                'breadcrum': 'Home',
+                'origem': '/',
+                'tempo': 0
+            }
+        });
+
+        $("#Warmup").click(function(o) {
+            $($.Hive.get(0)).send({
+                'cmd': 'DoWarmUp'
+            });
+        });
+
+        $("#Start").click(function(o) {
+            $("#Stop").removeAttr('disabled');
+            $($.Hive.get(0)).send({
+                'cmd': 'GetOneFromLine'
+            });
+        });
+
+        $("#Spawn").click(function(o) {
+            $($.Hive.get(0)).send({
+                'cmd': 'GetOneFromLine'
+            });
+        });
+
+        $("#Stop").click(function(o) {
+            $("#Start").removeAttr('disabled');
+            $("#Stop").attr('disabled', 'disabled');
+        });
+
+        $("#Hide").click(function(o) {
+            $("#Graficos").toggle();
+        });
+
+        $("#Start").removeAttr('disabled');
+
+        Highcharts.setOptions({
+            global: {
+                useUTC: false
+            }
+        });
+
+        var SerieReponse = [{
+            name: 'Single request response data'
+        }, {
+            name: 'Erros over time',
+            lineWidth: 0,
+            color: '#FF0000',
+        }, {
+            name: 'Memory over time'
+        }, {
+            name: 'Average memory usage'
+        }, {
+            name: 'Average response time'
+        }, {
+            name: 'Response size',
+            color: '#FFF000',
+        }];
+
+        var configPadrao = {
+            chart: {
+                type: 'line',
+                marginRight: 10,
+                zoomType: 'x'
+            },
+            title: {
+                text: 'Fila/Response over Time'
+            },
+            xAxis: {
+                type: 'datetime'
+            },
+            plotOptions: {
+                line: {
+                    dataLabels: {
+                        enabled: false
+                    }
+                }
+            },
+            yAxis: [{
+                min: 0,
+                title: {
+                    text: 'Resposta'
+                },
+                plotLines: [{
+                    value: 0,
+                    width: 1,
+                    color: '#808080'
+                }]
+            }],
+            //,
+            legend: {
+                enabled: false
+            },
+            exporting: {
+                enabled: false
+            },
+            series: []
+        };
+        var ConfigLines = configPadrao;
+        //ConfigLines.series = SerieLines;
+        //ConfigLines.title.text = "Average Reponse/Memory usage";
+
+        //$('#containerLine').highcharts(ConfigLines);
+
+        var ConfigResponse = configPadrao;
+        ConfigResponse.title.text = "Resposta (em ms) por tempo";
+        ConfigResponse.series = SerieReponse;
+        ConfigResponse.tooltip = {
+            formatter: function() {
+                try {
+                    switch (this.series.name) {
+                        case 'Single request response data':
+                            var mem = '';
+                            if (typeof(labelizer[this.x][this.y].memusage) !== 'undefined')
+                                mem = '<b>Mem: </b>' + parseFloat(labelizer[this.x][this.y].memusage).toFixed(2) + 'Mb <br>';
+
+                            if (typeof(labelizer[this.x][this.y].size) !== 'undefined')
+                                mem = '<b>Size: </b>' + parseFloat(labelizer[this.x][this.y].size / 1000).toFixed(2) + 'Mb <br>';
+
+                            var bc = labelizer[this.x][this.y].breadcrum.split('>');
+                            var fullBreakedPath = '';
+                            for (var path in bc) {
+                                fullBreakedPath += '>' + bc[path].substring(0, 20) + (((path + 1) % 3) ? '' : '<br>');
+                            }
+
+                            labelizer[this.x].bcum = labelizer[this.x][this.y].endereco.substring(0, 80) + '<br>' +
+                                fullBreakedPath + '<br>';
+
+                            return '<b>' + this.series.name + '</b><br/>' +
+                                Highcharts.numberFormat(this.y, 0) + 'ms <br/>' +
+                                labelizer[this.x][this.y].endereco.substring(0, 80) + '<br>' +
+                                fullBreakedPath + '<br>';
+                            break;
+                        case 'Erros over time':
+                            return '<b>' + this.series.name + '</b><br/>' +
+                                labelizer[this.x].bcum + '<br>' +
+                                '<b>' + labelizer[this.x][this.y].erro.substring(0, 80);
+                            break;
+                        case 'Memory over time':
+                            mem = '<b>Mem: </b>' + parseFloat(this.y).toFixed(2) + 'Mb <br>';
+
+                            return '<b>' + this.series.name + '</b><br/>' +
+                                caminhos[this.x] + '<br>' +
+                                mem;
+                            break;
+                        case 'Response size':
+                            mem = '<b>Size: </b>' + parseFloat(this.y / 10000).toFixed(3) + 'Mb <br>';
+                            console.log(labelizer[this.x][this.y]);
+                            return '<b>' +
+                                this.series.name +
+                                '</b><br/>' +
+                                caminhos[this.x] +
+                                '<br>' +
+                                mem;
+                            break;
+                        default:
+                            return '<b>' + this.series.name + ': ' + this.y + '</b><br/>';
+                            break;
+
+                    }
+                } catch (e) {
+                    console.log(e);
+                    return '<b>' + this.series.name + '</b>';
+                }
+            }
+        };
+        $('#containerResponse').highcharts(ConfigResponse);
+    });
+</script>
+
+</html>
